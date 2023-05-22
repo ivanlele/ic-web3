@@ -327,26 +327,30 @@ impl<T: Transport> Contract<T> {
 
 // #[cfg(feature = "signing")]
 mod contract_signing {
-    use super::*;
+    use super::{*, tokens::Tokenizable};
     use crate::{
         api::Accounts,
         types::{SignedTransaction, TransactionParameters},
     };
 
     impl<T: Transport> Contract<T> {
-        pub async fn sign(
+        pub async fn sign<Tk: Tokenizable+Clone>(
             &self,
             func: &str,
-            params: impl Tokenize,
+            params: Vec<Tk>,
             options: Options,
             from: String,
             key_info: KeyInfo,
             chain_id: u64,
         ) -> crate::Result<SignedTransaction> {
+            let params: Vec<Token> = params.iter().map(|e| {
+                e.clone().into_token()
+            }).collect();
+
             let fn_data = self
                 .abi
                 .function(func)
-                .and_then(|function| function.encode_input(&params.into_tokens()))
+                .and_then(|function| function.encode_input(&params))
                 // TODO [ToDr] SendTransactionWithConfirmation should support custom error type (so that we can return
                 // `contract::Error` instead of more generic `Error`.
                 .map_err(|err| crate::error::Error::Decoder(format!("{:?}", err)))?;
@@ -375,15 +379,16 @@ mod contract_signing {
         ///
         /// Note this function DOES NOT wait for any confirmations, so there is no guarantees that the call is actually executed.
         /// If you'd rather wait for block inclusion, please use [`signed_call_with_confirmations`] instead.
-        pub async fn signed_call(
+        pub async fn signed_call<Tk: Tokenizable+Clone>(
             &self,
             func: &str,
-            params: impl Tokenize,
+            params: Vec<Tk>,
             options: Options,
             from: String,
             key_info: KeyInfo,
             chain_id: u64,
-        ) -> crate::Result<H256> {
+        ) -> crate::Result<H256> 
+        {
             let signed = self.sign(func, params, options, from, key_info, chain_id).await?;
             self.eth.send_raw_transaction(signed.raw_transaction).await
         }
@@ -392,10 +397,10 @@ mod contract_signing {
         //
         // This function will wait for block inclusion of the transaction before returning.
         // If you'd rather just submit transaction and receive it's hash, please use [`signed_call`] instead.
-        pub async fn signed_call_with_confirmations(
+        pub async fn signed_call_with_confirmations<Tk: Tokenizable+Clone>(
             &self,
             func: &str,
-            params: impl Tokenize,
+            params: Vec<Tk>,
             options: Options,
             from: String,
             confirmations: usize,
@@ -554,7 +559,7 @@ mod tests {
             let token = contract(&transport);
 
             // when
-            futures::executor::block_on(token.estimate_gas("name", (), Address::from_low_u64_be(5), Options::default()))
+            futures::executor::block_on(token.estimate_gas("name", vec![], Address::from_low_u64_be(5), Options::default()))
                 .unwrap()
         };
 

@@ -2,6 +2,7 @@ use candid::candid_method;
 use ic_cdk_macros::{self, update};
 use std::str::FromStr;
 
+use ethabi::Token;
 use ic_web3::transports::ICHttp;
 use ic_web3::Web3;
 use ic_web3::ic::{get_eth_addr, KeyInfo};
@@ -206,8 +207,14 @@ async fn send_token(token_addr: String, addr: String, value: u64) -> Result<Stri
         op.transaction_type = Some(U64::from(2)) //EIP1559_TX_ID
     });
     let to_addr = Address::from_str(&addr).unwrap();
+
+    let params = vec![
+        Token::Address(to_addr),
+        Token::Uint(value.into()),
+    ];
+    
     let txhash = contract
-        .signed_call("transfer", (to_addr, value,), options, hex::encode(canister_addr), key_info, CHAIN_ID)
+        .signed_call("transfer", params, options, hex::encode(canister_addr), key_info, CHAIN_ID)
         .await
         .map_err(|e| format!("token transfer failed: {}", e))?;
 
